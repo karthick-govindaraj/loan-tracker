@@ -21,6 +21,8 @@ test("₹50,000 preview shortens tenure and interest without mutating state", ()
   const preview = simulatePrepayment(state,state.loan.baselineDate,50000,state.loan.baselineDate);
   assert.ok(preview.schedule.length < base.schedule.length);
   assert.ok(preview.interestSaved > 0);
+  assert.ok(preview.remainingInterest < base.totalInterest);
+  assert.ok(Math.abs(preview.remainingInterest+preview.interestSaved-base.totalInterest)<0.01);
   assert.equal(serializeState(state),before);
 });
 

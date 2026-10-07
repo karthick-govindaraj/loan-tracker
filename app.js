@@ -162,6 +162,7 @@ function simulatePrepayment(state, asOfDate, amount, paymentDate = asOfDate) {
       schedule: accelerated.projection.schedule,
       payoffDate: accelerated.projection.payoffDate,
       paymentsSaved: Math.max(0,base.schedule.length-accelerated.projection.schedule.length),
+      remainingInterest: accelerated.projection.totalInterest,
       interestSaved: round2(Math.max(0,base.totalInterest-accelerated.projection.totalInterest))
     };
   }
@@ -177,6 +178,7 @@ function simulatePrepayment(state, asOfDate, amount, paymentDate = asOfDate) {
     schedule,
     payoffDate: schedule.at(-1)?.date || paymentDate,
     paymentsSaved: Math.max(0,base.schedule.length-schedule.length),
+    remainingInterest: acceleratedInterest,
     interestSaved: round2(Math.max(0,base.totalInterest-acceleratedInterest))
   };
 }
@@ -272,6 +274,8 @@ function boot() {
     $("#metric-payoff").textContent=prettyDate(model.projection.payoffDate);
     $("#metric-emis").textContent=number.format(model.projection.schedule.length);
     $("#metric-interest").textContent=money.format(model.totalInterestPaid);
+    $("#metric-interest-left").textContent=money.format(model.projection.totalInterest);
+    $("#metric-interest-total").textContent=`Lifetime estimate ${money.format(model.totalInterestPaid+model.projection.totalInterest)}`;
     $("#progress-ring").style.setProperty("--p",progress);
     $("#progress-pct").textContent=`${progress.toFixed(1)}%`;
     $("#principal-paid").textContent=money.format(model.principalPaid);
@@ -367,7 +371,7 @@ function boot() {
       const amount=Number($("#prepay-amount").value), date=$("#prepay-date").value;
       if(!date || date<state.loan.baselineDate || date>today) throw new RangeError("Choose a date from the statement date through today.");
       preview=simulatePrepayment(state,today,amount,date); previewPayload={amount,date};
-      $("#preview-payoff").textContent=prettyDate(preview.payoffDate); $("#preview-months").textContent=`${preview.paymentsSaved} months`; $("#preview-interest").textContent=money.format(preview.interestSaved); $("#preview-balance").textContent=money.format(preview.balanceAfter);
+      $("#preview-payoff").textContent=prettyDate(preview.payoffDate); $("#preview-months").textContent=`${preview.paymentsSaved} months`; $("#preview-interest").textContent=money.format(preview.interestSaved); $("#preview-interest-left").textContent=money.format(preview.remainingInterest); $("#preview-balance").textContent=money.format(preview.balanceAfter);
       $("#prepay-preview").classList.remove("hidden"); $("#record-prepayment").classList.remove("hidden"); renderChart();
     } catch(error) { preview=null; previewPayload=null; $("#prepay-preview").classList.add("hidden"); $("#record-prepayment").classList.add("hidden"); setError("#prepay-error",error.message); renderChart(); }
   });
