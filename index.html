@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#07111f">
   <title>Loan Freedom</title>
-  <meta name="description" content="A private, cloud-synced home-loan payoff tracker.">
+  <meta name="description" content="A cloud-synced home-loan payoff tracker.">
   <style>
     :root{--bg:#07111f;--panel:#0d1b2d;--panel2:#12243a;--text:#f3f7fb;--muted:#91a3b9;--line:#20344b;--green:#34d399;--green2:#10b981;--cyan:#38bdf8;--amber:#fbbf24;--red:#fb7185;--shadow:0 18px 55px rgba(0,0,0,.28);--radius:22px}
     :root[data-theme="light"]{--bg:#edf4f2;--panel:#fff;--panel2:#f5faf8;--text:#102033;--muted:#607085;--line:#d8e4e0;--shadow:0 15px 40px rgba(16,32,51,.1)}
@@ -22,7 +22,7 @@
     .chart-card{padding:22px;overflow:hidden}.chart-head{display:flex;align-items:start;justify-content:space-between;gap:15px}.legend{display:flex;flex-wrap:wrap;gap:14px;color:var(--muted);font-size:12px}.legend i{display:inline-block;width:9px;height:9px;border-radius:99px;margin-right:5px}.balance-chart{display:block;width:100%;height:250px;margin-top:18px;overflow:visible}.axis{fill:var(--muted);font-size:10px}.gridline{stroke:var(--line);stroke-width:1}.area{fill:url(#areaFill)}.loan-line{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.preview-line{fill:none;stroke:var(--cyan);stroke-width:2.5;stroke-dasharray:7 7}.split{margin-top:22px}.split-bar{height:18px;display:flex;border-radius:99px;overflow:hidden;background:var(--line)}.split-bar span:first-child{background:var(--green)}.split-bar span:last-child{background:var(--amber)}.split-labels{display:flex;justify-content:space-between;gap:15px;margin-top:10px;color:var(--muted);font-size:13px}.split-labels strong{color:var(--text)}
     .milestones{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.milestone{position:relative;padding:18px;overflow:hidden}.milestone.done{border-color:rgba(52,211,153,.55)}.milestone .flag{font-size:25px}.milestone strong{display:block;font-size:20px;margin-top:12px}.milestone small{color:var(--muted)}.milestone .bar{height:5px;background:var(--line);border-radius:99px;margin-top:15px;overflow:hidden}.milestone .bar span{display:block;height:100%;background:var(--green)}
     .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px;margin-top:17px}table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;padding:13px 15px;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em;background:var(--panel2)}td{font-variant-numeric:tabular-nums}tr:last-child td{border:0}.row-actions{display:flex;gap:6px}.source-tag{color:var(--muted);font-size:12px}
-    .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.notice{padding:15px;border:1px solid rgba(56,189,248,.25);background:rgba(56,189,248,.07);border-radius:14px;color:var(--muted);font-size:13px}.file-label{position:relative;overflow:hidden}.file-label input{position:absolute;inset:0;opacity:0;cursor:pointer}.button-row{display:flex;flex-wrap:wrap;gap:9px;margin-top:17px}.auth-gate{width:min(520px,calc(100% - 32px));margin:72px auto;padding:28px}.auth-gate h1{font-size:34px;margin:0 0 10px}.auth-gate form{display:grid;gap:12px}.auth-gate .btn{width:100%}
+    .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.notice{padding:15px;border:1px solid rgba(56,189,248,.25);background:rgba(56,189,248,.07);border-radius:14px;color:var(--muted);font-size:13px}.file-label{position:relative;overflow:hidden}.file-label input{position:absolute;inset:0;opacity:0;cursor:pointer}.button-row{display:flex;flex-wrap:wrap;gap:9px;margin-top:17px}.cloud-gate{width:min(520px,calc(100% - 32px));margin:72px auto;padding:28px}.cloud-gate h1{font-size:34px;margin:0 0 10px}
     dialog{width:min(470px,calc(100% - 28px));color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:23px}dialog::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(4px)}dialog h2{margin:0}.toast{position:fixed;right:20px;bottom:20px;z-index:60;max-width:min(390px,calc(100% - 40px));padding:13px 16px;border-radius:13px;color:#05251c;background:var(--green);font-weight:800;box-shadow:var(--shadow);transform:translateY(120px);opacity:0;transition:.25s}.toast.show{transform:none;opacity:1}.confetti{pointer-events:none;position:fixed;inset:0;z-index:55;overflow:hidden}.confetti i{position:absolute;top:-15px;width:8px;height:14px;background:var(--green);animation:fall 1.6s ease-in forwards}@keyframes fall{to{transform:translate(var(--x),105vh) rotate(720deg);opacity:.15}}
     footer{padding:30px 0 45px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}.footer-row{display:flex;justify-content:space-between;gap:20px}.skip-link{position:absolute;left:-9999px}.skip-link:focus{left:12px;top:12px;z-index:99;background:var(--green);color:#05251c;padding:10px;border-radius:8px}
     @media(max-width:900px){.hero,.grid-2,.settings-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.milestones{grid-template-columns:repeat(2,1fr)}.nav-links{display:none}.privacy{margin-left:auto}}
@@ -37,19 +37,13 @@
       <a class="brand" href="#main"><span class="logo" aria-hidden="true">₹</span><span>Loan Freedom</span></a>
       <div class="nav-links"><a href="#overview">Overview</a><a href="#actions">Pay faster</a><a href="#activity">Activity</a><a href="#settings">Backup</a></div>
       <span class="privacy saving" id="cloud-status" role="status" aria-live="polite">● Connecting…</span>
-      <button class="btn small hidden" id="sign-out" type="button">Sign out</button>
       <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch colour theme">☀︎</button>
     </nav>
   </header>
 
-  <section id="auth-gate" class="auth-gate panel">
-    <h1>Open your loan tracker</h1>
-    <p class="subtle">Enter your email. Supabase will send a secure sign-in link—no password to remember.</p>
-    <form id="auth-form">
-      <div class="field"><label for="auth-email">Email address</label><input id="auth-email" type="email" autocomplete="email" required></div>
-      <button class="btn primary" id="auth-submit" type="submit">Send sign-in link</button>
-    </form>
-    <p class="subtle" id="auth-message" role="status" aria-live="polite" style="margin-top:14px">Connecting to Supabase…</p>
+  <section id="cloud-gate" class="cloud-gate panel">
+    <h1>Connecting to your tracker</h1>
+    <p class="subtle" id="cloud-message" role="status" aria-live="polite">Loading loan data from Supabase…</p>
   </section>
 
   <main id="main" class="shell hidden">
@@ -57,7 +51,7 @@
       <div>
         <span class="eyebrow"><span class="dot"></span>Home loan freedom plan</span>
         <h1><span id="hero-balance">₹17.88L</span> left.<br><span class="gradient">Every payment buys freedom.</span></h1>
-        <p class="lead">Track the 15th, test part-payments and see the finish line move closer. Your financial data is securely synced through Supabase.</p>
+        <p class="lead">Track the 15th, test part-payments and see the finish line move closer. Your financial data is synced through Supabase.</p>
         <div class="hero-actions"><a class="btn primary" href="#actions">Test a part-payment</a><a class="btn" href="#activity">View payment history</a></div>
       </div>
       <aside class="panel progress-panel" aria-label="Loan repayment progress">
@@ -134,7 +128,7 @@
       <div class="section-head"><div><h2>Backup and privacy</h2><p>Supabase is the database. Keep an occasional JSON backup for independent recovery.</p></div></div>
       <div class="settings-grid">
         <article class="panel card"><h3>Portable JSON backup</h3><p class="subtle">The import is validated before it replaces saved activity.</p><div class="button-row"><button id="export-data" class="btn primary" type="button">Export JSON</button><label class="btn file-label">Import JSON<input id="import-data" type="file" accept="application/json,.json"></label><button id="reset-data" class="btn danger" type="button">Reset to statement</button></div></article>
-        <aside class="notice"><strong>Projection notice.</strong> Figures here are estimates using monthly reducing balance. Repco may use daily-interest calculations, rounding and future floating-rate changes, so its official statement remains the source of truth. Loan data is protected by Supabase sign-in and row-level security. No account number, contact details, address, customer ID or co-applicant information is stored here.</aside>
+        <aside class="notice"><strong>Projection notice.</strong> Figures here are estimates using monthly reducing balance. Repco may use daily-interest calculations, rounding and future floating-rate changes, so its official statement remains the source of truth. This app uses one shared Supabase row without authentication. No account number, contact details, address, customer ID or co-applicant information is stored here.</aside>
       </div>
     </section>
   </main>

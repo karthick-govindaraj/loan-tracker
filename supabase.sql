@@ -1,17 +1,16 @@
-create table if not exists public.loan_tracker_state (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+create table if not exists public.loan_tracker_public_state (
+  id text primary key check (id = 'main'),
   state jsonb not null,
   updated_at timestamptz not null default now()
 );
 
-alter table public.loan_tracker_state enable row level security;
-revoke all on table public.loan_tracker_state from anon;
-grant select, insert, update on table public.loan_tracker_state to authenticated;
+alter table public.loan_tracker_public_state enable row level security;
+grant select, insert, update on table public.loan_tracker_public_state to anon;
 
-drop policy if exists "Users manage their own loan tracker" on public.loan_tracker_state;
-create policy "Users manage their own loan tracker"
-on public.loan_tracker_state
+drop policy if exists "Public app can use the main tracker row" on public.loan_tracker_public_state;
+create policy "Public app can use the main tracker row"
+on public.loan_tracker_public_state
 for all
-to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+to anon
+using (id = 'main')
+with check (id = 'main');

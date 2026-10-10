@@ -1,5 +1,6 @@
 const STORAGE_KEY = "loan-freedom-v1";
-const SUPABASE_TABLE = "loan_tracker_state";
+const SUPABASE_TABLE = "loan_tracker_public_state";
+const SUPABASE_ROW_ID = "main";
 const VERSION = 1;
 
 const HISTORY = [
@@ -237,14 +238,14 @@ function loadLegacyState(storage) {
 
 function createCloudStore(client) {
   return {
-    async load(userId) {
-      const {data,error}=await client.from(SUPABASE_TABLE).select("state").eq("user_id",userId).maybeSingle();
+    async load() {
+      const {data,error}=await client.from(SUPABASE_TABLE).select("state").eq("id",SUPABASE_ROW_ID).maybeSingle();
       if(error) throw error;
       return data ? validateState(data.state) : null;
     },
-    async save(userId,state) {
+    async save(state) {
       const checked=validateState(state);
-      const {error}=await client.from(SUPABASE_TABLE).upsert({user_id:userId,state:checked,updated_at:new Date().toISOString()},{onConflict:"user_id"});
+      const {error}=await client.from(SUPABASE_TABLE).upsert({id:SUPABASE_ROW_ID,state:checked,updated_at:new Date().toISOString()},{onConflict:"id"});
       if(error) throw error;
       return checked;
     }
@@ -262,9 +263,7 @@ async function boot() {
   const compactMoney = value => value >= 10000000 ? `₹${(value/10000000).toFixed(2)}Cr` : value >= 100000 ? `₹${(value/100000).toFixed(2)}L` : money.format(value);
   const today = (()=>{const d=new Date();return isoDate(new Date(d.getFullYear(),d.getMonth(),d.getDate(),12));})();
   let state = clone(DEFAULT_STATE);
-  let currentUser = null;
   let cloudStore = null;
-  let supabaseClient = null;
   let saveQueue = Promise.resolve(true);
   let model;
   let preview = null;
@@ -281,12 +280,12 @@ async function boot() {
 
   function persist(message) {
     render();
-    const snapshot=clone(state), userId=currentUser?.id;
-    if(!cloudStore||!userId) return Promise.resolve(false);
+    const snapshot=clone(state);
+    if(!cloudStore) return Promise.resolve(false);
     setCloudStatus("Saving…","saving");
     saveQueue=saveQueue.then(async()=>{
       try {
-        await cloudStore.save(userId,snapshot);
+        await cloudStore.save(snapshot);
         setCloudStatus("Cloud synced");
         if(message) toast(message);
         return true;
@@ -299,42 +298,34 @@ async function boot() {
     return saveQueue;
   }
 
-  function showSignedOut(message="Sign in to load your loan tracker.") {
-    currentUser=null;
+  function showCloudError(message) {
     $("#main").classList.add("hidden");
-    $("#auth-gate").classList.remove("hidden");
-    $("#sign-out").classList.add("hidden");
-    $("#auth-message").textContent=message;
-    setCloudStatus("Sign-in required","saving");
+    $("#cloud-gate").classList.remove("hidden");
+    $("#cloud-message").textContent=message;
+    setCloudStatus("Cloud unavailable","failed");
   }
 
-  async function loadCloudState(user) {
+  async function loadCloudState() {
     setCloudStatus("Loading…","saving");
-    $("#auth-submit").disabled=true;
     try {
-      let next=await cloudStore.load(user.id);
+      let next=await cloudStore.load();
       const legacy=loadLegacyState(localStorage);
       if(!next) {
         next=legacy || clone(DEFAULT_STATE);
         ensureExpectedEmis(next,today);
-        await cloudStore.save(user.id,next);
+        await cloudStore.save(next);
       } else if(ensureExpectedEmis(next,today)) {
-        await cloudStore.save(user.id,next);
+        await cloudStore.save(next);
       }
       if(legacy) try { localStorage.removeItem(STORAGE_KEY); } catch {}
       state=next;
-      currentUser=user;
-      $("#auth-gate").classList.add("hidden");
+      $("#cloud-gate").classList.add("hidden");
       $("#main").classList.remove("hidden");
-      $("#sign-out").classList.remove("hidden");
       setCloudStatus("Cloud synced");
       render();
       if(legacy) toast("Existing browser data moved to Supabase.");
     } catch(error) {
-      showSignedOut(`Could not load Supabase data: ${error.message}`);
-      setCloudStatus("Cloud unavailable","failed");
-    } finally {
-      $("#auth-submit").disabled=false;
+      showCloudError(`Could not load Supabase data: ${error.message}`);
     }
   }
 
@@ -476,42 +467,14 @@ async function boot() {
 
   const config=window.LOAN_TRACKER_SUPABASE;
   if(!config?.url || !config?.publishableKey || config.publishableKey.includes("PASTE_")) {
-    showSignedOut("Supabase setup is incomplete. Add the publishable key to supabase-config.js, then reload.");
-    $("#auth-submit").disabled=true;
+    showCloudError("Supabase setup is incomplete. Add the publishable key to supabase-config.js, then reload.");
     return;
   }
   if(!window.supabase?.createClient) {
-    showSignedOut("The Supabase browser library could not be loaded. Check your connection and reload.");
-    $("#auth-submit").disabled=true;
+    showCloudError("The Supabase browser library could not be loaded. Check your connection and reload.");
     return;
   }
 
-  supabaseClient=window.supabase.createClient(config.url,config.publishableKey);
-  cloudStore=createCloudStore(supabaseClient);
-
-  $("#auth-form").addEventListener("submit",async event=>{
-    event.preventDefault();
-    const email=$("#auth-email").value.trim();
-    if(!email) return;
-    $("#auth-submit").disabled=true;
-    $("#auth-message").textContent="Sending secure sign-in link…";
-    const {error}=await supabaseClient.auth.signInWithOtp({email,options:{emailRedirectTo:`${location.origin}${location.pathname}`}});
-    $("#auth-submit").disabled=false;
-    $("#auth-message").textContent=error?`Sign-in failed: ${error.message}`:"Check your email and open the sign-in link on this device.";
-  });
-
-  $("#sign-out").addEventListener("click",async()=>{
-    const {error}=await supabaseClient.auth.signOut();
-    if(error) toast(`Sign-out failed: ${error.message}`);
-  });
-
-  const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
-  if(sessionError) showSignedOut(`Could not check your Supabase session: ${sessionError.message}`);
-  else if(session?.user) await loadCloudState(session.user);
-  else showSignedOut();
-
-  supabaseClient.auth.onAuthStateChange((event,session)=>{
-    if(event==="SIGNED_OUT") showSignedOut("Signed out. Your loan data remains safely stored in Supabase.");
-    else if(event==="SIGNED_IN"&&session?.user&&session.user.id!==currentUser?.id) loadCloudState(session.user);
-  });
+  cloudStore=createCloudStore(window.supabase.createClient(config.url,config.publishableKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}}));
+  await loadCloudState();
 }

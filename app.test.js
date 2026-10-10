@@ -81,14 +81,14 @@ test("valid legacy browser data can be migrated and malformed data is ignored", 
   assert.equal(loadLegacyState(storage),null);
 });
 
-test("Supabase store loads and upserts only validated user state", async () => {
+test("Supabase store loads and upserts only validated shared state", async () => {
   const state=fresh(), writes=[];
   const client={
     from(table) {
-      assert.equal(table,"loan_tracker_state");
+      assert.equal(table,"loan_tracker_public_state");
       return {
-        select() { return {eq(column,userId) {
-          assert.equal(column,"user_id"); assert.equal(userId,"user-1");
+        select() { return {eq(column,id) {
+          assert.equal(column,"id"); assert.equal(id,"main");
           return {maybeSingle:async()=>({data:{state},error:null})};
         }}; },
         async upsert(row,options) { writes.push({row,options}); return {error:null}; }
@@ -96,10 +96,10 @@ test("Supabase store loads and upserts only validated user state", async () => {
     }
   };
   const store=createCloudStore(client);
-  assert.deepEqual(await store.load("user-1"),state);
-  await store.save("user-1",state);
-  assert.equal(writes[0].row.user_id,"user-1");
+  assert.deepEqual(await store.load(),state);
+  await store.save(state);
+  assert.equal(writes[0].row.id,"main");
   assert.deepEqual(writes[0].row.state,state);
-  assert.deepEqual(writes[0].options,{onConflict:"user_id"});
-  await assert.rejects(()=>store.save("user-1",{bad:true}),/Loan Freedom v1/);
+  assert.deepEqual(writes[0].options,{onConflict:"id"});
+  await assert.rejects(()=>store.save({bad:true}),/Loan Freedom v1/);
 });
