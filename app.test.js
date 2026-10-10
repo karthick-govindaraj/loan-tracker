@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   DEFAULT_STATE, ensureExpectedEmis, applyTrackedEvents, projectLoan,
-  simulatePrepayment, parseBackup, serializeState, loadState, saveState
+  simulatePrepayment, parseBackup, serializeState, loadLegacyState, createCloudStore
 } = require("./app.js");
 
 const fresh = () => JSON.parse(JSON.stringify(DEFAULT_STATE));
@@ -70,13 +70,36 @@ test("invalid inputs and negative amortization are rejected", () => {
   assert.throws(()=>parseBackup(JSON.stringify(duplicate)),/Duplicate/);
 });
 
-test("validated JSON persists across reload", () => {
+test("valid legacy browser data can be migrated and malformed data is ignored", () => {
   const values = new Map();
-  const storage = {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
+  const storage = {getItem:key=>values.get(key)??null};
   const state=fresh();
   state.goalDate="2035-10-15";
-  saveState(storage,state);
-  assert.deepEqual(loadState(storage),state);
+  values.set("loan-freedom-v1",serializeState(state));
+  assert.deepEqual(loadLegacyState(storage),state);
   values.set("loan-freedom-v1","broken");
-  assert.deepEqual(loadState(storage),fresh());
+  assert.equal(loadLegacyState(storage),null);
+});
+
+test("Supabase store loads and upserts only validated user state", async () => {
+  const state=fresh(), writes=[];
+  const client={
+    from(table) {
+      assert.equal(table,"loan_tracker_state");
+      return {
+        select() { return {eq(column,userId) {
+          assert.equal(column,"user_id"); assert.equal(userId,"user-1");
+          return {maybeSingle:async()=>({data:{state},error:null})};
+        }}; },
+        async upsert(row,options) { writes.push({row,options}); return {error:null}; }
+      };
+    }
+  };
+  const store=createCloudStore(client);
+  assert.deepEqual(await store.load("user-1"),state);
+  await store.save("user-1",state);
+  assert.equal(writes[0].row.user_id,"user-1");
+  assert.deepEqual(writes[0].row.state,state);
+  assert.deepEqual(writes[0].options,{onConflict:"user_id"});
+  await assert.rejects(()=>store.save("user-1",{bad:true}),/Loan Freedom v1/);
 });

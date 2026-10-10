@@ -1,4 +1,5 @@
 const STORAGE_KEY = "loan-freedom-v1";
+const SUPABASE_TABLE = "loan_tracker_state";
 const VERSION = 1;
 
 const HISTORY = [
@@ -227,42 +228,115 @@ function validateState(candidate) {
 const serializeState = state => JSON.stringify(validateState(state),null,2);
 const parseBackup = json => validateState(JSON.parse(json));
 
-function loadState(storage) {
-  const saved = storage?.getItem(STORAGE_KEY);
-  if (!saved) return clone(DEFAULT_STATE);
-  try { return parseBackup(saved); } catch { return clone(DEFAULT_STATE); }
+function loadLegacyState(storage) {
+  try {
+    const saved = storage?.getItem(STORAGE_KEY);
+    return saved ? parseBackup(saved) : null;
+  } catch { return null; }
 }
 
-function saveState(storage, state) {
-  storage?.setItem(STORAGE_KEY,serializeState(state));
+function createCloudStore(client) {
+  return {
+    async load(userId) {
+      const {data,error}=await client.from(SUPABASE_TABLE).select("state").eq("user_id",userId).maybeSingle();
+      if(error) throw error;
+      return data ? validateState(data.state) : null;
+    },
+    async save(userId,state) {
+      const checked=validateState(state);
+      const {error}=await client.from(SUPABASE_TABLE).upsert({user_id:userId,state:checked,updated_at:new Date().toISOString()},{onConflict:"user_id"});
+      if(error) throw error;
+      return checked;
+    }
+  };
 }
 
-if (typeof module !== "undefined") module.exports = {DEFAULT_STATE,rateAt,nextDueDate,ensureExpectedEmis,applyTrackedEvents,projectLoan,buildModel,simulatePrepayment,requiredPayment,validateState,serializeState,parseBackup,loadState,saveState};
-if (typeof document !== "undefined") boot();
+if (typeof module !== "undefined") module.exports = {DEFAULT_STATE,rateAt,nextDueDate,ensureExpectedEmis,applyTrackedEvents,projectLoan,buildModel,simulatePrepayment,requiredPayment,validateState,serializeState,parseBackup,loadLegacyState,createCloudStore};
+if (typeof document !== "undefined") boot().catch(error=>console.error("Loan tracker startup failed",error));
 
-function boot() {
+async function boot() {
   const $ = selector => document.querySelector(selector);
   const money = new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0});
   const number = new Intl.NumberFormat("en-IN",{maximumFractionDigits:0});
   const prettyDate = date => dateOf(date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"});
   const compactMoney = value => value >= 10000000 ? `₹${(value/10000000).toFixed(2)}Cr` : value >= 100000 ? `₹${(value/100000).toFixed(2)}L` : money.format(value);
   const today = (()=>{const d=new Date();return isoDate(new Date(d.getFullYear(),d.getMonth(),d.getDate(),12));})();
-  let state = loadState(localStorage);
+  let state = clone(DEFAULT_STATE);
+  let currentUser = null;
+  let cloudStore = null;
+  let supabaseClient = null;
+  let saveQueue = Promise.resolve(true);
   let model;
   let preview = null;
   let previewPayload = null;
-  const added = ensureExpectedEmis(state,today);
-  if (added) saveState(localStorage,state);
 
   const setError = (id,message="") => { const el=$(id); el.textContent=message; el.classList.toggle("hidden",!message); };
   const toast = message => { const el=$("#toast"); el.textContent=message; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),2600); };
+  const setCloudStatus = (message,status="") => { const el=$("#cloud-status"); el.textContent=`● ${message}`; el.className=`privacy ${status}`; };
   const celebrate = () => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const box=$("#confetti"); box.innerHTML=Array.from({length:28},(_,i)=>`<i style="left:${(i*37)%100}%;--x:${(i%2?1:-1)*(20+i*3)}px;animation-delay:${(i%7)*.04}s;background:${i%3===0?'var(--cyan)':i%3===1?'var(--green)':'var(--amber)'}"></i>`).join("");
     setTimeout(()=>box.replaceChildren(),1900);
   };
 
-  function persist(message) { saveState(localStorage,state); render(); if (message) toast(message); }
+  function persist(message) {
+    render();
+    const snapshot=clone(state), userId=currentUser?.id;
+    if(!cloudStore||!userId) return Promise.resolve(false);
+    setCloudStatus("Saving…","saving");
+    saveQueue=saveQueue.then(async()=>{
+      try {
+        await cloudStore.save(userId,snapshot);
+        setCloudStatus("Cloud synced");
+        if(message) toast(message);
+        return true;
+      } catch(error) {
+        setCloudStatus("Cloud save failed","failed");
+        toast(`Cloud save failed: ${error.message}`);
+        return false;
+      }
+    });
+    return saveQueue;
+  }
+
+  function showSignedOut(message="Sign in to load your loan tracker.") {
+    currentUser=null;
+    $("#main").classList.add("hidden");
+    $("#auth-gate").classList.remove("hidden");
+    $("#sign-out").classList.add("hidden");
+    $("#auth-message").textContent=message;
+    setCloudStatus("Sign-in required","saving");
+  }
+
+  async function loadCloudState(user) {
+    setCloudStatus("Loading…","saving");
+    $("#auth-submit").disabled=true;
+    try {
+      let next=await cloudStore.load(user.id);
+      const legacy=loadLegacyState(localStorage);
+      if(!next) {
+        next=legacy || clone(DEFAULT_STATE);
+        ensureExpectedEmis(next,today);
+        await cloudStore.save(user.id,next);
+      } else if(ensureExpectedEmis(next,today)) {
+        await cloudStore.save(user.id,next);
+      }
+      if(legacy) try { localStorage.removeItem(STORAGE_KEY); } catch {}
+      state=next;
+      currentUser=user;
+      $("#auth-gate").classList.add("hidden");
+      $("#main").classList.remove("hidden");
+      $("#sign-out").classList.remove("hidden");
+      setCloudStatus("Cloud synced");
+      render();
+      if(legacy) toast("Existing browser data moved to Supabase.");
+    } catch(error) {
+      showSignedOut(`Could not load Supabase data: ${error.message}`);
+      setCloudStatus("Cloud unavailable","failed");
+    } finally {
+      $("#auth-submit").disabled=false;
+    }
+  }
 
   function render() {
     model = buildModel(state,today);
@@ -361,7 +435,7 @@ function boot() {
     if(item.type==="emi"&&state.events.some(e=>e.type==="emi"&&e.id!==item.id&&e.period===period)) return toast("An EMI already exists for that month.");
     const draft=clone(state), next=draft.events.find(e=>e.id===item.id); Object.assign(next,{date,amount,status}); if(next.type==="emi")next.period=period;
     try{validateState(draft);}catch(error){return toast(error.message);}
-    state=draft; $("#event-dialog").close(); persist(status==="confirmed"?"Payment confirmed. One step closer.":"EMI updated."); if(status==="confirmed") celebrate();
+    state=draft; $("#event-dialog").close(); persist(status==="confirmed"?"Payment confirmed. One step closer.":"EMI updated.").then(saved=>{if(saved&&status==="confirmed")celebrate();});
   });
   $("#cancel-event").addEventListener("click",()=>$("#event-dialog").close());
 
@@ -379,7 +453,7 @@ function boot() {
   $("#record-prepayment").addEventListener("click",()=>{
     if(!previewPayload) return;
     state.events.push({id:`prepay-${Date.now()}`,type:"prepayment",date:previewPayload.date,amount:previewPayload.amount,status:"confirmed"});
-    preview=null; previewPayload=null; $("#prepay-preview").classList.add("hidden"); $("#record-prepayment").classList.add("hidden"); persist("Part-payment recorded. Your finish line moved closer!"); celebrate();
+    preview=null; previewPayload=null; $("#prepay-preview").classList.add("hidden"); $("#record-prepayment").classList.add("hidden"); persist("Part-payment recorded. Your finish line moved closer!").then(saved=>{if(saved)celebrate();});
   });
 
   $("#rate-form").addEventListener("submit",event=>{
@@ -398,5 +472,46 @@ function boot() {
   $("#import-data").addEventListener("change",async event=>{try{const next=parseBackup(await event.target.files[0].text());if(!confirm("Replace current tracker data with this validated backup?"))return;state=next;preview=null;persist("Backup restored.");}catch(error){toast(`Import rejected: ${error.message}`);}finally{event.target.value="";}});
   $("#reset-data").addEventListener("click",()=>{if(!confirm("Reset all activity to the 7 October 2026 statement baseline?"))return;state=clone(DEFAULT_STATE);ensureExpectedEmis(state,today);preview=null;persist("Tracker reset to statement baseline.");});
 
-  $("#prepay-date").value=today; $("#prepay-date").max=today; $("#rate-date").value=today; render();
+  $("#prepay-date").value=today; $("#prepay-date").max=today; $("#rate-date").value=today;
+
+  const config=window.LOAN_TRACKER_SUPABASE;
+  if(!config?.url || !config?.publishableKey || config.publishableKey.includes("PASTE_")) {
+    showSignedOut("Supabase setup is incomplete. Add the publishable key to supabase-config.js, then reload.");
+    $("#auth-submit").disabled=true;
+    return;
+  }
+  if(!window.supabase?.createClient) {
+    showSignedOut("The Supabase browser library could not be loaded. Check your connection and reload.");
+    $("#auth-submit").disabled=true;
+    return;
+  }
+
+  supabaseClient=window.supabase.createClient(config.url,config.publishableKey);
+  cloudStore=createCloudStore(supabaseClient);
+
+  $("#auth-form").addEventListener("submit",async event=>{
+    event.preventDefault();
+    const email=$("#auth-email").value.trim();
+    if(!email) return;
+    $("#auth-submit").disabled=true;
+    $("#auth-message").textContent="Sending secure sign-in link…";
+    const {error}=await supabaseClient.auth.signInWithOtp({email,options:{emailRedirectTo:`${location.origin}${location.pathname}`}});
+    $("#auth-submit").disabled=false;
+    $("#auth-message").textContent=error?`Sign-in failed: ${error.message}`:"Check your email and open the sign-in link on this device.";
+  });
+
+  $("#sign-out").addEventListener("click",async()=>{
+    const {error}=await supabaseClient.auth.signOut();
+    if(error) toast(`Sign-out failed: ${error.message}`);
+  });
+
+  const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
+  if(sessionError) showSignedOut(`Could not check your Supabase session: ${sessionError.message}`);
+  else if(session?.user) await loadCloudState(session.user);
+  else showSignedOut();
+
+  supabaseClient.auth.onAuthStateChange((event,session)=>{
+    if(event==="SIGNED_OUT") showSignedOut("Signed out. Your loan data remains safely stored in Supabase.");
+    else if(event==="SIGNED_IN"&&session?.user&&session.user.id!==currentUser?.id) loadCloudState(session.user);
+  });
 }
